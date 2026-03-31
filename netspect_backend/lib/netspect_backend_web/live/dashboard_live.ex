@@ -7,6 +7,8 @@ defmodule NetspectBackendWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    flows = FlowStore.get_flows()
+
     if connected?(socket) do
       :timer.send_interval(@refresh_interval, self(), :refresh_flows)
     end
@@ -14,56 +16,43 @@ defmodule NetspectBackendWeb.DashboardLive do
     {:ok,
       socket
       |> assign(:page_title, "NetSpect Dashboard")
-      |> assign(:flows, FlowStore.get_flows())}
+      |> assign(:flows, flows)}
   end
 
-  @impl true
+  @impl truegit add netspect_backend/lib/netspect_backend_web/live/dashboard_live.ex
+
   def handle_info(:refresh_flows, socket) do
-    {:noreply, assign(socket, :flows, FlowStore.get_flows())}
+    flows = FlowStore.get_flows()
+
+    socket =
+      socket
+      |> assign(:flows, flows)
+      |> push_event("flows_updated", %{flows: flows})
+
+    {:noreply, socket}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-8">
-      <h1 class="text-3xl font-bold mb-2">NetSpect Dashboard</h1>
-      <p class="text-gray-600 mb-6">
-        Real-time network flows captured from the Python sniffer
+    <div style="padding: 30px;">
+      <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 20px;">
+        NetSpect Live Network Graph
+      </h1>
+
+      <p style="margin-bottom: 20px; color: gray;">
+        Real-time visualization of network flows (source → destination)
       </p>
 
-      <div class="mb-4">
-        <span class="font-semibold">Total flows:</span> <%= length(@flows) %>
+      <div
+        id="graph"
+        phx-hook="GraphHook"
+        phx-update="ignore"
+        style="width: 100%; height: 600px; border: 1px solid #ccc; border-radius: 10px;">
       </div>
 
-      <div class="overflow-x-auto border rounded-lg">
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="text-left p-3">Protocol</th>
-              <th class="text-left p-3">Direction</th>
-              <th class="text-left p-3">Source IP</th>
-              <th class="text-left p-3">Src Port</th>
-              <th class="text-left p-3">Destination IP</th>
-              <th class="text-left p-3">Dst Port</th>
-              <th class="text-left p-3">Packets</th>
-              <th class="text-left p-3">Bytes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= for flow <- @flows do %>
-              <tr class="border-t">
-                <td class="p-3"><%= flow.protocol %></td>
-                <td class="p-3"><%= flow.direction %></td>
-                <td class="p-3"><%= flow.src_ip %></td>
-                <td class="p-3"><%= flow.src_port %></td>
-                <td class="p-3"><%= flow.dst_ip %></td>
-                <td class="p-3"><%= flow.dst_port %></td>
-                <td class="p-3"><%= flow.packet_count %></td>
-                <td class="p-3"><%= flow.total_bytes %></td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
+      <div style="margin-top: 20px;">
+        <strong>Total flows:</strong> <%= length(@flows) %>
       </div>
     </div>
     """
