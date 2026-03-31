@@ -5,7 +5,7 @@ defmodule NetspectBackend.AlertEngine do
 
   @packet_threshold 20
   @byte_threshold 50_000
-  @common_ports [80, 443, 53, 22, 25, 110, 143, 123]
+  @common_ports [80, 443, 53, 22, 25, 110, 123, 143]
 
   def analyze_flow(flow) do
     []
@@ -61,7 +61,7 @@ defmodule NetspectBackend.AlertEngine do
     end
   end
 
-  # Only check unusual destination ports for outbound flows
+  # Only flag unusual ports for outbound flows
   defp maybe_add_unusual_port_alert(alerts, flow) do
     cond do
       flow.direction != "outbound" ->

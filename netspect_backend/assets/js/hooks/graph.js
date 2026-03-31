@@ -69,7 +69,7 @@ let GraphHook = {
     },
 
     renderGraph(flows, suspiciousNodes) {
-        const LOCAL_IP = "172.20.10.2"
+        const LOCAL_IP = "172.17.59.152"
 
         let nodeMap = {}
         let edges = []

@@ -7,29 +7,31 @@ def should_skip_packet(parsed):
     if parsed is None:
         return True
 
-    dst_ip = parsed["dst_ip"]
     src_ip = parsed["src_ip"]
-    dst_port = parsed["dst_port"]
+    dst_ip = parsed["dst_ip"]
     src_port = parsed["src_port"]
+    dst_port = parsed["dst_port"]
 
-    # Ignore multicast / broadcast / invalid
+    # Ignore multicast / broadcast / invalid traffic
     if dst_ip.startswith("224.") or dst_ip.startswith("239."):
         return True
+
     if dst_ip == "255.255.255.255" or dst_ip == "0.0.0.0":
         return True
+
     if src_ip == "0.0.0.0":
         return True
 
-    # Ignore noisy discovery / local broadcast traffic
+    # Ignore common noisy discovery / local broadcast ports
     noisy_ports = {5353, 137, 138, 1900, 67, 68}
-    if dst_port in noisy_ports or src_port in noisy_ports:
+    if src_port in noisy_ports or dst_port in noisy_ports:
         return True
 
-    # Ignore local-only traffic
+    # Ignore purely local/private traffic
     if parsed["direction"] == "local":
         return True
 
-    # Ignore non TCP/UDP
+    # Ignore unknown protocol packets
     if parsed["protocol"] not in ["TCP", "UDP"]:
         return True
 
