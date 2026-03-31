@@ -4,11 +4,12 @@ defmodule NetspectBackendWeb.DashboardLive do
   alias NetspectBackend.FlowStore
   alias NetspectBackend.AlertEngine
 
-  @refresh_interval 300
+  @refresh_interval 1000
+  @max_flows 25
 
   @impl true
   def mount(_params, _session, socket) do
-    flows = FlowStore.get_flows()
+    flows = latest_flows()
     alerts = Enum.flat_map(flows, &AlertEngine.analyze_flow/1)
     suspicious_nodes = AlertEngine.suspicious_nodes(flows)
 
@@ -17,18 +18,16 @@ defmodule NetspectBackendWeb.DashboardLive do
     end
 
     {:ok,
-      socket
-      |> assign(:page_title, "NetSpect Dashboard")
-      |> assign(:flows, flows)
-      |> assign(:alerts, alerts)
-      |> assign(:suspicious_nodes, suspicious_nodes)}
+     socket
+     |> assign(:page_title, "NetSpect Dashboard")
+     |> assign(:flows, flows)
+     |> assign(:alerts, alerts)
+     |> assign(:suspicious_nodes, suspicious_nodes)}
   end
 
   @impl true
   def handle_info(:refresh_flows, socket) do
-    flows =
-      FlowStore.get_flows()
-      |> Enum.take(30) # Limit to latest 30 flows for performance
+    flows = latest_flows()
     alerts = Enum.flat_map(flows, &AlertEngine.analyze_flow/1)
     suspicious_nodes = AlertEngine.suspicious_nodes(flows)
 
@@ -45,6 +44,12 @@ defmodule NetspectBackendWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  defp latest_flows do
+    FlowStore.get_flows()
+    |> Enum.sort_by(& &1.total_bytes, :desc)
+    |> Enum.take(@max_flows)
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -59,7 +64,7 @@ defmodule NetspectBackendWeb.DashboardLive do
 
       <div style="display: flex; gap: 20px; margin-bottom: 20px;">
         <div style="padding: 12px 16px; border: 1px solid #ccc; border-radius: 10px;">
-          <strong>Total flows:</strong> <%= length(@flows) %>
+          <strong>Total flows shown:</strong> <%= length(@flows) %>
         </div>
 
         <div style="padding: 12px 16px; border: 1px solid #ccc; border-radius: 10px;">

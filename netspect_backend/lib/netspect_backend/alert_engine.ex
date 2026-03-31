@@ -3,7 +3,6 @@ defmodule NetspectBackend.AlertEngine do
   Simple rule-based alert engine for NetSpect.
   """
 
-  # hardcoded values
   @packet_threshold 20
   @byte_threshold 50_000
   @common_ports [80, 443, 53, 22, 25, 110, 143, 123]
@@ -62,21 +61,30 @@ defmodule NetspectBackend.AlertEngine do
     end
   end
 
+  # Only check unusual destination ports for outbound flows
   defp maybe_add_unusual_port_alert(alerts, flow) do
-    if flow.dst_port && flow.dst_port not in @common_ports do
-      [
-        %{
-          type: "unusual_port",
-          severity: "low",
-          message: "Flow is using an unusual destination port",
-          src_ip: flow.src_ip,
-          dst_ip: flow.dst_ip,
-          dst_port: flow.dst_port
-        }
-        | alerts
-      ]
-    else
-      alerts
+    cond do
+      flow.direction != "outbound" ->
+        alerts
+
+      is_nil(flow.dst_port) ->
+        alerts
+
+      flow.dst_port in @common_ports ->
+        alerts
+
+      true ->
+        [
+          %{
+            type: "unusual_port",
+            severity: "low",
+            message: "Outbound flow is using an unusual destination port",
+            src_ip: flow.src_ip,
+            dst_ip: flow.dst_ip,
+            dst_port: flow.dst_port
+          }
+          | alerts
+        ]
     end
   end
 end
