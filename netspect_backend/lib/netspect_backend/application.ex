@@ -11,10 +11,12 @@ defmodule NetspectBackend.Application do
       NetspectBackendWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:netspect_backend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: NetspectBackend.PubSub},
+      NetspectBackend.FlowStore,
       # Start a worker by calling: NetspectBackend.Worker.start_link(arg)
       # {NetspectBackend.Worker, arg},
       # Start to serve requests, typically the last entry
       NetspectBackendWeb.Endpoint
+
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
