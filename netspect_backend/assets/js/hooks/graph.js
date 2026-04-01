@@ -38,6 +38,15 @@ let GraphHook = {
             }
             },
             {
+            selector: "node.blocked",
+            style: {
+                "background-color": "#111111",
+                "border-width": 4,
+                "border-color": "#ffcc00",
+                "text-outline-color": "#111111"
+            }
+            },
+            {
             selector: "node.local.suspicious",
             style: {
                 "background-color": "#28a745",
@@ -63,14 +72,17 @@ let GraphHook = {
         }
         })
 
-        this.handleEvent("flows_updated", ({ flows, suspicious_nodes }) => {
-        this.renderGraph(flows, suspicious_nodes)
+        this.cy.on("tap", "node", (evt) => {
+        const ip = evt.target.id()
+        this.pushEvent("node_selected", { ip: ip })
+        })
+
+        this.handleEvent("flows_updated", ({ flows, suspicious_nodes, local_nodes, blocked_ips }) => {
+        this.renderGraph(flows, suspicious_nodes, local_nodes, blocked_ips)
         })
     },
 
-    renderGraph(flows, suspiciousNodes) {
-        const LOCAL_IP = "172.17.59.152"
-
+    renderGraph(flows, suspiciousNodes, localNodes, blockedIps) {
         let nodeMap = {}
         let edges = []
 
@@ -90,12 +102,16 @@ let GraphHook = {
         let nodeElements = Object.keys(nodeMap).map(ip => {
         let classes = ""
 
-        if (ip === LOCAL_IP) {
+        if (localNodes.includes(ip)) {
             classes += "local "
         }
 
         if (suspiciousNodes.includes(ip)) {
             classes += "suspicious "
+        }
+
+        if (blockedIps.includes(ip)) {
+            classes += "blocked "
         }
 
         return {
