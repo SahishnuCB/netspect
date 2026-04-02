@@ -20,6 +20,15 @@ let GraphHook = {
             }
             },
             {
+            selector: "node.local",
+            style: {
+                "background-color": "#28a745",
+                "border-width": 3,
+                "border-color": "#14532d",
+                "text-outline-color": "#28a745"
+            }
+            },
+            {
             selector: "node.suspicious",
             style: {
                 "background-color": "#d62728",
@@ -29,30 +38,12 @@ let GraphHook = {
             }
             },
             {
-            selector: "node.local",
-            style: {
-                "background-color": "#28a745",
-                "border-width": 4,
-                "border-color": "#14532d",
-                "text-outline-color": "#28a745"
-            }
-            },
-            {
             selector: "node.blocked",
             style: {
                 "background-color": "#111111",
                 "border-width": 4,
                 "border-color": "#ffcc00",
                 "text-outline-color": "#111111"
-            }
-            },
-            {
-            selector: "node.local.suspicious",
-            style: {
-                "background-color": "#28a745",
-                "border-width": 5,
-                "border-color": "#ff0000",
-                "text-outline-color": "#28a745"
             }
             },
             {
@@ -72,11 +63,13 @@ let GraphHook = {
         }
         })
 
+        // click node
         this.cy.on("tap", "node", (evt) => {
         const ip = evt.target.id()
         this.pushEvent("node_selected", { ip: ip })
         })
 
+        // updates from backend
         this.handleEvent("flows_updated", ({ flows, suspicious_nodes, local_nodes, blocked_ips }) => {
         this.renderGraph(flows, suspicious_nodes, local_nodes, blocked_ips)
         })
@@ -86,6 +79,7 @@ let GraphHook = {
         let nodeMap = {}
         let edges = []
 
+        // collect nodes + edges
         flows.forEach(flow => {
         nodeMap[flow.src_ip] = true
         nodeMap[flow.dst_ip] = true
@@ -99,14 +93,48 @@ let GraphHook = {
         })
         })
 
-        let nodeElements = Object.keys(nodeMap).map(ip => {
+        let allNodes = Object.keys(nodeMap)
+
+        // 🔥 find YOUR machine (most frequent local IP)
+        let localCount = {}
+
+        flows.forEach(flow => {
+        if (localNodes.includes(flow.src_ip)) {
+            localCount[flow.src_ip] = (localCount[flow.src_ip] || 0) + 1
+        }
+        if (localNodes.includes(flow.dst_ip)) {
+            localCount[flow.dst_ip] = (localCount[flow.dst_ip] || 0) + 1
+        }
+        })
+
+        let mainLocalIP = null
+        let maxCount = 0
+
+        Object.entries(localCount).forEach(([ip, count]) => {
+        if (count > maxCount) {
+            maxCount = count
+            mainLocalIP = ip
+        }
+        })
+
+        // ✅ keep only:
+        // - your machine
+        // - non-local (internet)
+        let filteredNodes = allNodes.filter(ip => {
+        if (ip === mainLocalIP) return true
+        if (!localNodes.includes(ip)) return true
+        return false
+        })
+
+        // build nodes
+        let nodeElements = filteredNodes.map(ip => {
         let classes = ""
 
-        if (localNodes.includes(ip)) {
+        if (ip === mainLocalIP) {
             classes += "local "
         }
 
-        if (suspiciousNodes.includes(ip)) {
+        if (suspiciousNodes.includes(ip) && ip !== mainLocalIP) {
             classes += "suspicious "
         }
 
@@ -123,8 +151,15 @@ let GraphHook = {
         }
         })
 
+        // keep only valid edges
+        let filteredEdges = edges.filter(edge =>
+        filteredNodes.includes(edge.data.source) &&
+        filteredNodes.includes(edge.data.target)
+        )
+
+        // render
         this.cy.elements().remove()
-        this.cy.add([...nodeElements, ...edges])
+        this.cy.add([...nodeElements, ...filteredEdges])
         this.cy.layout({ name: "cose", animate: false }).run()
     }
 }

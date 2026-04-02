@@ -21,15 +21,15 @@ defmodule NetspectBackendWeb.DashboardLive do
     end
 
     {:ok,
-     socket
-     |> assign(:page_title, "NetSpect Dashboard")
-     |> assign(:flows, flows)
-     |> assign(:alerts, alerts)
-     |> assign(:suspicious_nodes, suspicious_nodes)
-     |> assign(:local_nodes, local_nodes)
-     |> assign(:blocked_ips, blocked_ips)
-     |> assign(:selected_node, nil)
-     |> assign(:selected_flows, [])}
+      socket
+      |> assign(:page_title, "NetSpect Dashboard")
+      |> assign(:flows, flows)
+      |> assign(:alerts, alerts)
+      |> assign(:suspicious_nodes, suspicious_nodes)
+      |> assign(:local_nodes, local_nodes)
+      |> assign(:blocked_ips, blocked_ips)
+      |> assign(:selected_node, nil)
+      |> assign(:selected_flows, [])}
   end
 
   @impl true
@@ -71,9 +71,9 @@ defmodule NetspectBackendWeb.DashboardLive do
         blocked_ips = ResponseEngine.get_blocked_ips()
 
         {:noreply,
-         socket
-         |> assign(:blocked_ips, blocked_ips)
-         |> put_flash(:info, message)}
+          socket
+          |> assign(:blocked_ips, blocked_ips)
+          |> put_flash(:info, message)}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, reason)}
@@ -86,9 +86,9 @@ defmodule NetspectBackendWeb.DashboardLive do
     selected_flows = Enum.filter(flows, fn flow -> flow.src_ip == ip or flow.dst_ip == ip end)
 
     {:noreply,
-     socket
-     |> assign(:selected_node, ip)
-     |> assign(:selected_flows, selected_flows)}
+      socket
+      |> assign(:selected_node, ip)
+      |> assign(:selected_flows, selected_flows)}
   end
 
   defp latest_flows do
@@ -97,14 +97,17 @@ defmodule NetspectBackendWeb.DashboardLive do
     |> Enum.take(@max_flows)
   end
 
+  # FIXED: only treat the most frequent IP as the main local node
   defp detect_local_nodes(flows) do
-    flows
-    |> Enum.flat_map(fn flow ->
-      [{flow.src_ip, flow.direction == "outbound"}, {flow.dst_ip, flow.direction == "inbound"}]
-    end)
-    |> Enum.filter(fn {_ip, is_local} -> is_local end)
-    |> Enum.map(fn {ip, _} -> ip end)
-    |> Enum.uniq()
+    local_counts =
+      flows
+      |> Enum.flat_map(fn flow -> [flow.src_ip, flow.dst_ip] end)
+      |> Enum.frequencies()
+
+    case Enum.max_by(local_counts, fn {_ip, count} -> count end, fn -> nil end) do
+      nil -> []
+      {main_ip, _count} -> [main_ip]
+    end
   end
 
   defp private_or_special_ip?(ip) do

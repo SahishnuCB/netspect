@@ -1,17 +1,30 @@
 defmodule NetspectBackend.AlertEngine do
   @moduledoc """
-  Simple rule-based alert engine for NetSpect.
+  Configurable rule-based alert engine for NetSpect.
   """
 
-  @packet_threshold 20
-  @byte_threshold 50_000
-  @common_ports [80, 443, 53, 22, 25, 110, 123, 143]
+  alias NetspectBackend.EventSnapshotStore
+  alias NetspectBackend.TelemetryMetrics
 
   def analyze_flow(flow) do
-    []
-    |> maybe_add_high_packet_alert(flow)
-    |> maybe_add_high_byte_alert(flow)
-    |> maybe_add_unusual_port_alert(flow)
+    alerts =
+      []
+      |> maybe_add_high_packet_alert(flow)
+      |> maybe_add_high_byte_alert(flow)
+      |> maybe_add_unusual_port_alert(flow)
+
+    if alerts != [] do
+      TelemetryMetrics.increment_alerts(length(alerts))
+
+      Enum.each(alerts, fn alert ->
+        EventSnapshotStore.record_snapshot(%{
+          flow: flow,
+          alert: alert
+        })
+      end)
+    end
+
+    alerts
   end
 
   def suspicious_flow?(flow) do
@@ -19,14 +32,36 @@ defmodule NetspectBackend.AlertEngine do
   end
 
   def suspicious_nodes(flows) do
-    flows
-    |> Enum.filter(&suspicious_flow?/1)
-    |> Enum.flat_map(fn flow -> [flow.src_ip, flow.dst_ip] end)
-    |> Enum.uniq()
+  flows
+  |> Enum.filter(&suspicious_flow?/1)
+  |> Enum.flat_map(fn flow -> [flow.src_ip, flow.dst_ip] end)
+  |> Enum.reject(&local_ip?/1)
+  |> Enum.uniq()
+end
+
+  defp local_ip?(ip) do
+    String.starts_with?(ip, "192.168.") or
+    String.starts_with?(ip, "10.") or
+    String.starts_with?(ip, "172.")
+  end
+
+  defp packet_threshold do
+    Application.get_env(:netspect_backend, __MODULE__, [])
+    |> Keyword.get(:packet_threshold, 20)
+  end
+
+  defp byte_threshold do
+    Application.get_env(:netspect_backend, __MODULE__, [])
+    |> Keyword.get(:byte_threshold, 50_000)
+  end
+
+  defp safe_ports do
+    Application.get_env(:netspect_backend, __MODULE__, [])
+    |> Keyword.get(:safe_ports, [80, 443, 53, 22, 25, 110, 123, 143])
   end
 
   defp maybe_add_high_packet_alert(alerts, flow) do
-    if flow.packet_count > @packet_threshold do
+    if flow.packet_count > packet_threshold() do
       [
         %{
           type: "high_packet_count",
@@ -44,7 +79,7 @@ defmodule NetspectBackend.AlertEngine do
   end
 
   defp maybe_add_high_byte_alert(alerts, flow) do
-    if flow.total_bytes > @byte_threshold do
+    if flow.total_bytes > byte_threshold() do
       [
         %{
           type: "high_data_transfer",
@@ -61,7 +96,6 @@ defmodule NetspectBackend.AlertEngine do
     end
   end
 
-  # Only flag unusual ports for outbound flows
   defp maybe_add_unusual_port_alert(alerts, flow) do
     cond do
       flow.direction != "outbound" ->
@@ -70,7 +104,7 @@ defmodule NetspectBackend.AlertEngine do
       is_nil(flow.dst_port) ->
         alerts
 
-      flow.dst_port in @common_ports ->
+      flow.dst_port in safe_ports() ->
         alerts
 
       true ->
