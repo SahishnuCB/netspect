@@ -4,6 +4,9 @@ defmodule NetspectBackendWeb.DashboardLive do
   alias NetspectBackend.FlowStore
   alias NetspectBackend.AlertEngine
   alias NetspectBackend.ResponseEngine
+  alias NetspectBackend.TelemetryMetrics
+  alias NetspectBackendWeb.MetricsPanel
+  alias NetspectBackendWeb.TimelineComponent
 
   @refresh_interval 1000
   @max_flows 25
@@ -15,6 +18,14 @@ defmodule NetspectBackendWeb.DashboardLive do
     suspicious_nodes = AlertEngine.suspicious_nodes(flows)
     local_nodes = detect_local_nodes(flows)
     blocked_ips = ResponseEngine.get_blocked_ips()
+    metrics = TelemetryMetrics.get_metrics()
+
+    timeline = [
+      %{
+        timestamp: "just now",
+        message: "NetSpect dashboard started"
+      }
+    ]
 
     if connected?(socket) do
       :timer.send_interval(@refresh_interval, self(), :refresh_flows)
@@ -28,6 +39,8 @@ defmodule NetspectBackendWeb.DashboardLive do
       |> assign(:suspicious_nodes, suspicious_nodes)
       |> assign(:local_nodes, local_nodes)
       |> assign(:blocked_ips, blocked_ips)
+      |> assign(:metrics, metrics)
+      |> assign(:timeline, timeline)
       |> assign(:selected_node, nil)
       |> assign(:selected_flows, [])}
   end
@@ -39,11 +52,30 @@ defmodule NetspectBackendWeb.DashboardLive do
     suspicious_nodes = AlertEngine.suspicious_nodes(flows)
     local_nodes = detect_local_nodes(flows)
     blocked_ips = ResponseEngine.get_blocked_ips()
+    metrics = TelemetryMetrics.get_metrics()
+
+    new_event = %{
+      timestamp:
+        DateTime.utc_now()
+        |> DateTime.to_time()
+        |> Time.to_string()
+        |> String.slice(0, 8),
+      message: "Flows updated (#{length(flows)} active)"
+    }
+
+    timeline =
+      [new_event | socket.assigns.timeline]
+      |> Enum.take(10)
 
     selected_flows =
       case socket.assigns.selected_node do
-        nil -> []
-        ip -> Enum.filter(flows, fn flow -> flow.src_ip == ip or flow.dst_ip == ip end)
+        nil ->
+          []
+
+        ip ->
+          Enum.filter(flows, fn flow ->
+            flow.src_ip == ip or flow.dst_ip == ip
+          end)
       end
 
     socket =
@@ -53,6 +85,8 @@ defmodule NetspectBackendWeb.DashboardLive do
       |> assign(:suspicious_nodes, suspicious_nodes)
       |> assign(:local_nodes, local_nodes)
       |> assign(:blocked_ips, blocked_ips)
+      |> assign(:metrics, metrics)
+      |> assign(:timeline, timeline)
       |> assign(:selected_flows, selected_flows)
       |> push_event("flows_updated", %{
         flows: flows,
@@ -70,9 +104,23 @@ defmodule NetspectBackendWeb.DashboardLive do
       {:ok, message} ->
         blocked_ips = ResponseEngine.get_blocked_ips()
 
+        new_event = %{
+          timestamp:
+            DateTime.utc_now()
+            |> DateTime.to_time()
+            |> Time.to_string()
+            |> String.slice(0, 8),
+          message: "Blocked IP #{ip}"
+        }
+
+        timeline =
+          [new_event | socket.assigns.timeline]
+          |> Enum.take(10)
+
         {:noreply,
           socket
           |> assign(:blocked_ips, blocked_ips)
+          |> assign(:timeline, timeline)
           |> put_flash(:info, message)}
 
       {:error, reason} ->
@@ -82,8 +130,10 @@ defmodule NetspectBackendWeb.DashboardLive do
 
   @impl true
   def handle_event("node_selected", %{"ip" => ip}, socket) do
-    flows = latest_flows()
-    selected_flows = Enum.filter(flows, fn flow -> flow.src_ip == ip or flow.dst_ip == ip end)
+    selected_flows =
+      Enum.filter(socket.assigns.flows, fn flow ->
+        flow.src_ip == ip or flow.dst_ip == ip
+      end)
 
     {:noreply,
       socket
@@ -97,7 +147,6 @@ defmodule NetspectBackendWeb.DashboardLive do
     |> Enum.take(@max_flows)
   end
 
-  # FIXED: only treat the most frequent IP as the main local node
   defp detect_local_nodes(flows) do
     local_counts =
       flows
@@ -141,6 +190,8 @@ defmodule NetspectBackendWeb.DashboardLive do
   def render(assigns) do
     ~H"""
     <div style="padding: 30px;">
+      <MetricsPanel.render metrics={@metrics} />
+
       <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 20px;">
         NetSpect Live Network Graph
       </h1>
@@ -261,6 +312,8 @@ defmodule NetspectBackendWeb.DashboardLive do
           </div>
         <% end %>
       </div>
+
+      <TimelineComponent.render events={@timeline} />
     </div>
     """
   end

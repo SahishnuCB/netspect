@@ -49,3 +49,6 @@ Thumbs.db
 .vscode/
 
 *.log
+
+netspect_backend/priv/static/assets/
+netspect_backend/priv/static/*.gz
